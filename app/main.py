@@ -29,14 +29,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # MCP Server
 # ---------------------------------------------------------------------------
-mcp = FastMCP(
-    name="Docsie Video-to-Docs",
-    description=(
-        "Convert videos into structured documentation using AI. "
-        "Submit a video URL and get back a user guide, SOP, product docs, "
-        "policy document, or blog post. Requires a Docsie account."
-    ),
-)
+mcp = FastMCP("Docsie Video-to-Docs")
 
 # Register tools
 catalog.register(mcp)
