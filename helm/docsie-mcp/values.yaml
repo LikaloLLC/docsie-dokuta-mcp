@@ -36,9 +36,7 @@ resources:
 
 env:
   MCP_DOCSIE_BASE_URL: "https://app.docsie.io"
-  MCP_DOCSIE_INTERNAL_URL: "http://docsie-web:8080"
-  MCP_DOKUTA_API_URL: "https://app.videodokuta.com/api/v1"
-  MCP_FREE_TIER_MAX_SECONDS: "600"
+  MCP_DOCSIE_INTERNAL_URL: "http://docsie-web.docsie.svc:8080"
 
 # Doppler integration — syncs secrets automatically
 doppler:

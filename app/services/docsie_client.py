@@ -1,117 +1,105 @@
 """
-Async HTTP client for Docsie Django internal API.
+Async HTTP client for Docsie API.
 
-Handles token validation and credit deduction.
+Forwards the user's Bearer token to Docsie's v3 API.
+Docsie handles auth, org resolution, credits, and Dokuta interaction.
 """
 from __future__ import annotations
 
 import logging
-from typing import Optional
+from typing import Any
 
 import httpx
 
 from app.config import settings
-from app.models import UserContext
 
 logger = logging.getLogger(__name__)
 
-# Simple in-memory cache for token → UserContext (TTL managed by caller)
-_token_cache: dict[str, tuple[float, UserContext]] = {}
-_CACHE_TTL = 30  # seconds
+_client: httpx.AsyncClient | None = None
 
 
-async def get_user_context(bearer_token: str) -> Optional[UserContext]:
-    """
-    Validate an OAuth2 Bearer token against Docsie and return user context.
-
-    Caches results for 30 seconds to avoid hammering the introspect endpoint.
-    """
-    import time
-
-    now = time.time()
-
-    # Check cache
-    if bearer_token in _token_cache:
-        cached_at, ctx = _token_cache[bearer_token]
-        if now - cached_at < _CACHE_TTL:
-            return ctx
-        del _token_cache[bearer_token]
-
-    base = settings.docsie_internal_url.rstrip("/")
-    url = f"{base}/api/internal/mcp/user-context/"
-
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.get(
-                url,
-                headers={"Authorization": f"Bearer {bearer_token}"},
-            )
-    except httpx.RequestError as exc:
-        logger.error("Failed to reach Docsie for token validation: %s", exc)
-        return None
-
-    if resp.status_code != 200:
-        logger.debug("Token validation failed: %s %s", resp.status_code, resp.text[:200])
-        return None
-
-    data = resp.json()
-    ctx = UserContext(
-        user_id=data["user_id"],
-        username=data["username"],
-        email=data.get("email", ""),
-        organization_id=data["organization_id"],
-        organization_slug=data["organization_slug"],
-        organization_name=data.get("organization_name", ""),
-        workspace_id=data.get("workspace_id"),
-        plan=data.get("plan", "startup"),
-        is_paid=data.get("is_paid", False),
-        credits_available=data.get("credits", {}).get("total_available", 0),
-        scope=data.get("scope", ""),
-    )
-
-    _token_cache[bearer_token] = (now, ctx)
-    return ctx
+def _get_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None:
+        _client = httpx.AsyncClient(
+            base_url=settings.docsie_internal_url.rstrip("/"),
+            timeout=60.0,
+        )
+    return _client
 
 
-async def deduct_credits(
-    organization_id: str,
-    amount: int,
-    duration_minutes: float,
-    session_id: str = "",
-) -> bool:
-    """
-    Deduct credits from an organization via Docsie internal API.
+def _auth_headers(bearer_token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {bearer_token}"}
 
-    Returns True if deduction succeeded, False if insufficient credits.
-    """
-    base = settings.docsie_internal_url.rstrip("/")
-    url = f"{base}/api/internal/mcp/deduct-credits/"
 
-    body = {
-        "organization_id": organization_id,
-        "amount": amount,
-        "transaction_type": "deduct_video",
-        "metadata": {
-            "source": "mcp_server",
-            "duration_minutes": duration_minutes,
-            "session_id": session_id,
+async def submit_video(
+    bearer_token: str,
+    video_url: str,
+    quality: str = "standard",
+    language: str = "english",
+) -> dict[str, Any]:
+    """Submit a video for documentation generation via Docsie's v3 API."""
+    client = _get_client()
+    resp = await client.post(
+        "/api_v2/v3/video-to-docs/submit/",
+        headers=_auth_headers(bearer_token),
+        json={
+            "video_url": video_url,
+            "quality": quality,
+            "language": language,
         },
-    }
+    )
+    resp.raise_for_status()
+    return resp.json()
 
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(
-                url,
-                json=body,
-                headers={"X-Internal-Key": settings.mcp_internal_api_key},
-            )
-    except httpx.RequestError as exc:
-        logger.error("Failed to reach Docsie for credit deduction: %s", exc)
-        return False
 
-    if resp.status_code != 200:
-        logger.warning("Credit deduction failed: %s %s", resp.status_code, resp.text[:200])
-        return False
+async def get_job_status(bearer_token: str, job_id: str) -> dict[str, Any]:
+    """Poll job status via Docsie's v3 API."""
+    client = _get_client()
+    resp = await client.get(
+        f"/api_v2/v3/video-to-docs/{job_id}/status/",
+        headers=_auth_headers(bearer_token),
+    )
+    resp.raise_for_status()
+    return resp.json()
 
-    data = resp.json()
-    return data.get("success", False)
+
+async def get_job_result(bearer_token: str, job_id: str) -> dict[str, Any]:
+    """Get completed job result via Docsie's v3 API."""
+    client = _get_client()
+    resp = await client.get(
+        f"/api_v2/v3/video-to-docs/{job_id}/result/",
+        headers=_auth_headers(bearer_token),
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def estimate_cost(
+    bearer_token: str,
+    quality: str = "standard",
+    duration_minutes: float | None = None,
+) -> dict[str, Any]:
+    """Estimate credit cost for a video-to-docs job."""
+    client = _get_client()
+    body: dict[str, Any] = {"quality": quality}
+    if duration_minutes is not None:
+        body["duration_minutes"] = duration_minutes
+    resp = await client.post(
+        "/api_v2/v3/video-to-docs/estimate/",
+        headers=_auth_headers(bearer_token),
+        json=body,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+async def list_jobs(bearer_token: str) -> list[dict[str, Any]]:
+    """List the user's video-to-docs jobs."""
+    client = _get_client()
+    resp = await client.get(
+        "/api_v2/v3/video-to-docs/",
+        headers=_auth_headers(bearer_token),
+    )
+    resp.raise_for_status()
+    return resp.json()

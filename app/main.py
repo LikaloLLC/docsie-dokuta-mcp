@@ -2,15 +2,13 @@
 Docsie Video-to-Docs MCP Server
 
 Remote MCP server for Anthropic's Connectors Directory.
-Converts videos into structured documentation using Dokuta AI.
+Converts videos into structured documentation via Docsie's API.
 
 Transport: Streamable HTTP at /mcp
-Auth: OAuth2 via Docsie's /o2/ provider (proxied metadata)
+Auth: OAuth2 via Docsie's /o2/ provider
 """
 from __future__ import annotations
 
-import asyncio
-import json
 import logging
 
 from mcp.server.fastmcp import FastMCP
@@ -23,7 +21,6 @@ from starlette.routing import Mount, Route
 
 from app import auth
 from app.config import settings
-from app.rate_limit import periodic_cleanup
 from app.tools import catalog, video
 
 logging.basicConfig(level=logging.INFO)
@@ -34,12 +31,11 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 mcp = FastMCP(
     name="Docsie Video-to-Docs",
-    version="0.1.0",
+    version="0.2.0",
     description=(
         "Convert videos into structured documentation using AI. "
         "Submit a video URL and get back a user guide, SOP, product docs, "
-        "policy document, or blog post. Videos up to 10 minutes are free. "
-        "Sign in with Docsie for unlimited length."
+        "policy document, or blog post. Requires a Docsie account."
     ),
 )
 
@@ -76,20 +72,16 @@ async def well_known_oauth(request: Request) -> JSONResponse:
 # Health Check
 # ---------------------------------------------------------------------------
 async def health(request: Request) -> JSONResponse:
-    return JSONResponse({"status": "ok", "service": "docsie-mcp"})
+    return JSONResponse({"status": "ok", "service": "docsie-mcp", "version": "0.2.0"})
 
 
 # ---------------------------------------------------------------------------
-# MCP Auth Hook — extract Bearer token before each tool call
+# Auth Middleware — extract Bearer token for tool handlers
 # ---------------------------------------------------------------------------
-# The MCP SDK's streamable HTTP transport receives the Authorization header.
-# We intercept it in the ASGI middleware below to resolve the user context.
-
-
 class AuthMiddleware:
     """
     ASGI middleware that extracts the Bearer token from MCP requests
-    and sets the current user context for tool handlers.
+    and stores it in contextvars for tool handlers to forward to Docsie.
     """
 
     def __init__(self, app):
@@ -98,40 +90,13 @@ class AuthMiddleware:
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http":
             headers = dict(scope.get("headers", []))
-
-            # Extract Bearer token
             auth_header = headers.get(b"authorization", b"").decode()
             if auth_header.startswith("Bearer "):
-                token = auth_header[7:]
-                user = await auth.resolve_user_from_token(token)
-                auth.set_current_user(user)
+                auth.set_current_token(auth_header[7:])
             else:
-                auth.set_current_user(None)
-
-            # Extract client IP (X-Forwarded-For from ingress, or direct)
-            xff = headers.get(b"x-forwarded-for", b"").decode()
-            if xff:
-                # Take the first (leftmost) IP — the original client
-                client_ip = xff.split(",")[0].strip()
-            else:
-                client_ip = scope.get("client", ("",))[0] if scope.get("client") else None
-            auth.set_client_ip(client_ip)
+                auth.set_current_token(None)
 
         await self.app(scope, receive, send)
-
-
-# ---------------------------------------------------------------------------
-# Background cleanup for rate limiter
-# ---------------------------------------------------------------------------
-async def _rate_limit_cleanup_loop():
-    """Periodically clean up stale rate limit entries."""
-    while True:
-        await asyncio.sleep(1800)  # Every 30 minutes
-        periodic_cleanup()
-
-
-async def on_startup():
-    asyncio.create_task(_rate_limit_cleanup_loop())
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +105,6 @@ async def on_startup():
 mcp_asgi = mcp.streamable_http_app()
 
 app = Starlette(
-    on_startup=[on_startup],
     routes=[
         Route("/.well-known/oauth-authorization-server", well_known_oauth),
         Route("/health", health),
