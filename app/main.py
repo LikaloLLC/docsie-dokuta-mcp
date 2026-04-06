@@ -57,7 +57,7 @@ async def well_known_oauth(request: Request) -> JSONResponse:
     base = settings.docsie_base_url.rstrip("/")
     return JSONResponse({
         "issuer": base,
-        "authorization_endpoint": f"{base}/o2/authorize/",
+        "authorization_endpoint": f"{base}/o2/mcp/authorize/",
         "token_endpoint": f"{base}/o2/token/",
         "revocation_endpoint": f"{base}/o2/revoke_token/",
         "response_types_supported": ["code"],
