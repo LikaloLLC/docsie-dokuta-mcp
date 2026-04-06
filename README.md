@@ -76,17 +76,16 @@ curl -X POST http://localhost:8000/mcp \
 | `MCP_OAUTH2_CLIENT_ID` | OAuth2 client ID for the MCP app | (required) |
 | `MCP_FREE_TIER_MAX_SECONDS` | Max free video duration in seconds | `300` |
 
-## Deployment (Hetzner K3s)
+## Deployment (Kubernetes)
+
+Docker images are built and pushed automatically via GitHub Actions on push to `main`.
 
 ```bash
-# Build and push Docker image
-docker build -t registry.docsie.io/docsie-mcp:latest .
-docker push registry.docsie.io/docsie-mcp:latest
-
-# Deploy with Helm
-helm upgrade --install docsie-mcp helm/docsie-mcp/ \
-  --set secretEnv.MCP_DOKUTA_API_KEY=$DOKUTA_API_KEY \
-  --set secretEnv.MCP_MCP_INTERNAL_API_KEY=$MCP_INTERNAL_KEY
+# Deploy with Helm (secrets managed via Doppler)
+helm upgrade --install mcp-staging helm/docsie-mcp/ \
+  -n mcp \
+  --set image.tag=v2026.04.06.01 \
+  --set doppler.token=$DOPPLER_SERVICE_TOKEN
 ```
 
 ## Django Side Setup
@@ -124,4 +123,4 @@ To submit to the directory, you'll need:
 6. **Privacy policy**: https://www.docsie.io/privacy-policy/
 7. **Terms of service**: https://www.docsie.io/terms-of-service/
 
-Submit at: https://forms.gle/... (Anthropic's MCP Directory Submission Form)
+Submit at: https://console.anthropic.com/dashboard/connectors
