@@ -1,0 +1,35 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-egress
+  annotations:
+    description: "Allow MCP server to reach Docsie Django and external Dokuta API only"
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  policyTypes:
+    - Egress
+  egress:
+    # Allow DNS resolution
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow access to docsie-web (Django internal API)
+    - to:
+        - podSelector:
+            matchLabels:
+              app: docsie-web
+      ports:
+        - protocol: TCP
+          port: 8080
+    # Allow outbound HTTPS (Dokuta API, Supabase result URLs)
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+{{- end }}

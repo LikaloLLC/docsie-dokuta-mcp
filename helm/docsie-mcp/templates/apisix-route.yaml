@@ -1,0 +1,25 @@
+{{- if .Values.apisixRoute.enabled }}
+apiVersion: apisix.apache.org/v2
+kind: ApisixRoute
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  http:
+    - name: {{ .Release.Name }}-mcp
+      match:
+        hosts:
+          - {{ .Values.apisixRoute.host }}
+        paths:
+          - /*
+      backends:
+        - serviceName: {{ .Release.Name }}
+          servicePort: {{ .Values.service.port }}
+      plugins:
+        - name: cors
+          enable: true
+          config:
+            allow_origins: "https://claude.ai,https://api.anthropic.com"
+            allow_methods: "GET,POST,OPTIONS"
+            allow_headers: "Authorization,Content-Type"
+            max_age: 3600
+{{- end }}

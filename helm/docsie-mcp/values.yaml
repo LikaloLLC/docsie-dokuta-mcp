@@ -1,0 +1,55 @@
+replicaCount: 1
+
+image:
+  repository: docsie/docsie-mcp
+  tag: latest
+  pullPolicy: Always
+
+imagePullSecrets:
+  - name: docker-hub-repository-secret
+
+service:
+  type: ClusterIP
+  port: 8000
+
+# APISIX route — configure via ApisixRoute CRD
+apisixRoute:
+  enabled: true
+  host: mcp.docsie.io
+  # Set to your APISIX SSL certificate ID (create via admin API or ApisixTls CRD)
+  sslId: ""
+
+# Fallback: standard K8s Ingress (disable if using ApisixRoute)
+ingress:
+  enabled: false
+  host: mcp.docsie.io
+  annotations: {}
+  tls: []
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+env:
+  MCP_DOCSIE_BASE_URL: "https://app.docsie.io"
+  MCP_DOCSIE_INTERNAL_URL: "http://docsie-web:8080"
+  MCP_DOKUTA_API_URL: "https://app.videodokuta.com/api/v1"
+  MCP_FREE_TIER_MAX_SECONDS: "600"
+
+# Doppler integration — syncs secrets automatically
+doppler:
+  enabled: true
+  # Doppler service token (created via `doppler configs tokens create`)
+  # Set at install time: --set doppler.token=dp.st.xxx
+  token: ""
+  # Name of the K8s secret that Doppler operator will manage
+  managedSecretName: mcp-secret-doppler
+  resyncSeconds: 60
+
+# NetworkPolicy — restrict access to Django internal endpoints
+networkPolicy:
+  enabled: false
