@@ -31,7 +31,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 mcp = FastMCP(
     name="Docsie Video-to-Docs",
-    version="0.2.0",
     description=(
         "Convert videos into structured documentation using AI. "
         "Submit a video URL and get back a user guide, SOP, product docs, "
@@ -72,7 +71,7 @@ async def well_known_oauth(request: Request) -> JSONResponse:
 # Health Check
 # ---------------------------------------------------------------------------
 async def health(request: Request) -> JSONResponse:
-    return JSONResponse({"status": "ok", "service": "docsie-mcp", "version": "0.2.0"})
+    return JSONResponse({"status": "ok", "service": "docsie-mcp"})
 
 
 # ---------------------------------------------------------------------------
