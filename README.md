@@ -117,7 +117,7 @@ To submit to the directory, you'll need:
 
 1. **MCP Server URL**: `https://mcp.docsie.io/mcp`
 2. **OAuth2 metadata URL**: `https://mcp.docsie.io/.well-known/oauth-authorization-server`
-3. **Company name**: Docsie / Likalo Inc.
+3. **Company name**: Docsie Inc.
 4. **Description**: "Convert videos into structured documentation using AI. Submit a video URL and get back a user guide, SOP, product docs, or blog post."
 5. **Logo**: Docsie logo (SVG/PNG)
 6. **Privacy policy**: https://www.docsie.io/privacy-policy/
